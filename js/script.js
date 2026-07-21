@@ -10,6 +10,7 @@
 /* ---------- Element refs ---------- */
 const els = {
   projectName:      document.getElementById('projectName'),
+  siteSearch:       document.getElementById('siteSearch'),
   roadName:         document.getElementById('roadName'),
   roadDirection:    document.getElementById('roadDirection'),
   bearingGroup:     document.getElementById('bearingGroup'),
@@ -473,6 +474,20 @@ function bisector(v1, v2) {
   const len = Math.hypot(bx, by) || 1;
   return { x: bx / len, y: by / len };
 }
+/* left-to-right flow arrow marking the fiber cable's direction of travel
+   in a Crossing Profile view (entry is always drawn on the left) */
+function flowArrow(cx, cy) {
+  const len = 16, half = 7;
+  return `<polygon points="${(cx+len/2).toFixed(1)},${cy.toFixed(1)} ${(cx-len/2).toFixed(1)},${(cy-half).toFixed(1)} ${(cx-len/2).toFixed(1)},${(cy+half).toFixed(1)}" fill="#CC00AA" stroke="#fff" stroke-width="1.5"/>`;
+}
+/* point along a quadratic bezier (P0, control, P1) at parameter t */
+function quadBezierPt(p0, pc, p1, t) {
+  const mt = 1 - t;
+  return {
+    x: mt * mt * p0.x + 2 * mt * t * pc.x + t * t * p1.x,
+    y: mt * mt * p0.y + 2 * mt * t * pc.y + t * t * p1.y,
+  };
+}
 function hDim(x1, x2, y, label) {
   return `
     <line x1="${x1.toFixed(1)}" y1="${(y-9).toFixed(1)}" x2="${x1.toFixed(1)}" y2="${(y+4).toFixed(1)}" class="ext-line"/>
@@ -617,7 +632,7 @@ function sharedSvgStyle() {
       .tb-val     { font-family: 'IBM Plex Mono', monospace; font-size: 13px; fill: #1B3A5C; }
       .callout    { font-family: 'IBM Plex Sans Condensed', sans-serif; font-size: 15px; font-weight: 700; fill: #fff; }
       .plan-note  { font-family: 'IBM Plex Sans', sans-serif; font-size: 14px; fill: #1B3A5C; }
-      .road-end   { font-family: 'IBM Plex Sans Condensed', sans-serif; font-size: 22px; font-weight: 700; fill: #1B3A5C; }
+      .road-end   { font-family: 'IBM Plex Sans Condensed', sans-serif; font-size: 22px; font-weight: 700; fill: #fff; }
       .pave-label { font-family: 'IBM Plex Sans Condensed', sans-serif; font-size: 13px; font-weight: 700; fill: #fff; letter-spacing: .06em; }
       .pole-label { font-family: 'IBM Plex Sans Condensed', sans-serif; font-size: 13px; font-weight: 700; fill: #1B3A5C; letter-spacing: .04em; }
       .layer-lbl  { font-family: 'IBM Plex Sans Condensed', sans-serif; font-size: 12px; font-weight: 600; fill: #1B3A5C; }
@@ -661,30 +676,42 @@ function updateTitleBlock(geom) {
     : geom.type === 'canal' && geom.method === 'buried' ? 'Canal Buried HDD'
     : geom.type === 'canal' ? 'Canal Aerial'
     : 'Buried Bore';
+
+  const isCanal = geom.type === 'canal';
+  const crossAngDisplay = geom.crossAngDeg ?? 90;
+  const autoNotes = [
+    isCanal ? 'Canal / Ditch Crossing' : `Pavement: ${pavementLabel(geom.pavementType)}`,
+    `Crossing Angle: ${crossAngDisplay}°${crossAngDisplay === 90 ? ' (perpendicular)' : ' (skewed)'}`,
+    'NOT TO SCALE — FOR ILLUSTRATION PURPOSES ONLY',
+  ];
+  document.getElementById('tbAutoNotes').textContent = autoNotes.join('   ·   ');
 }
 
 /* compass rose — drawing is always north-up, so the arrow never rotates */
 function northArrow(cx, cy) {
   return `
     <g>
-      <line x1="${cx}" y1="${cy+42}" x2="${cx}" y2="${cy-42}" stroke="#1B3A5C" stroke-width="3.5"/>
-      <path d="M${cx-26} ${cy-16} L${cx} ${cy-58} L${cx+26} ${cy-16} Z" fill="#1B3A5C"/>
-      <path d="M${cx-26} ${cy-16} L${cx} ${cy-58} L${cx+26} ${cy-16} Z" fill="#050505" clip-path="inset(0 50% 0 0)"/>
-      <circle cx="${cx}" cy="${cy}" r="6" fill="#1B3A5C"/>
+      <line x1="${cx}" y1="${cy+33}" x2="${cx}" y2="${cy-33}" stroke="#1B3A5C" stroke-width="3"/>
+      <path d="M${cx-20} ${cy-12} L${cx} ${cy-45} L${cx+20} ${cy-12} Z" fill="#1B3A5C"/>
+      <path d="M${cx-20} ${cy-12} L${cx} ${cy-45} L${cx+20} ${cy-12} Z" fill="#050505" clip-path="inset(0 50% 0 0)"/>
+      <circle cx="${cx}" cy="${cy}" r="5" fill="#1B3A5C"/>
     </g>
-    <text x="${cx}" y="${cy+62}" text-anchor="middle" font-size="20" font-weight="800" fill="#1B3A5C" font-family="'IBM Plex Sans Condensed',sans-serif">N</text>`;
+    <text x="${cx}" y="${cy+48}" text-anchor="middle" font-size="20" font-weight="800" fill="#1B3A5C" font-family="'IBM Plex Sans Condensed',sans-serif">N</text>`;
 }
 
 /* ==========================================================
    PLAN VIEW  (shared by buried + aerial)
    ========================================================== */
-const PLAN_DW = 720;
+const PLAN_DW = 380;
 function drawPlanView(geom) {
   const scX  = PLAN_DW / geom.totalSpan;
-  const MAR  = { left: 140, right: 60, top: 50, bottom: 60 };
+  const MAR  = { left: 110, right: 48, top: 56, bottom: 50 };
 
-  /* keep the plan view landscape (wide, short) so it prints compactly */
-  const roadLenFt = Math.max(geom.totalSpan * 1.1, geom.rowWidth * 2.2, 50);
+  /* keep the plan view landscape (wide, short) so it prints compactly.
+     roadLenFt multiplier is raised to offset the smaller PLAN_DW, so the
+     drawing gets shorter (less road-width band) without also getting
+     narrower (shorter road length) — those are two independent axes. */
+  const roadLenFt = Math.max(geom.totalSpan * 1.1, geom.rowWidth * 2.4, 50);
   const drawW = roadLenFt * scX;
   const drawH = geom.totalSpan * scX;
   const VBW = MAR.left + MAR.right + drawW;
@@ -754,7 +781,7 @@ function drawPlanView(geom) {
   const rightLbl  = dirLabels ? dirLabels.pos : `${geom.bearing.toFixed(0)}°`;
   const leftLbl   = dirLabels ? dirLabels.neg : `${((geom.bearing+180)%360).toFixed(0)}°`;
 
-  const compassCx = VBW - 60, compassCy = 80;
+  const compassCx = VBW - 48, compassCy = 65;
 
   const isAerial     = geom.type === 'aerial';
   const isCanal      = geom.type === 'canal';
@@ -770,19 +797,21 @@ function drawPlanView(geom) {
     ? { x: boreRoadFar.x  + cableDir.x * poleSetbackPx, y: boreRoadFar.y  + cableDir.y * poleSetbackPx }
     : exitPitPlan;
 
-  /* Setback dims — projected onto roadNormal so the dim LINE is always perpendicular
-     to the road regardless of crossing angle. The label shows the actual setback value. */
-  const dimNearPit  = { x: cH - roadNormal.x * (roadHW + entrySetbackPx), y: cV - roadNormal.y * (roadHW + entrySetbackPx) };
-  const dimFarPit   = { x: cH + roadNormal.x * (roadHW + exitSetbackPx),  y: cV + roadNormal.y * (roadHW + exitSetbackPx)  };
-  const dimNearPole = { x: cH - roadNormal.x * (roadHW + poleSetbackPx),  y: cV - roadNormal.y * (roadHW + poleSetbackPx)  };
-  const dimFarPole  = { x: cH + roadNormal.x * (roadHW + poleSetbackPx),  y: cV + roadNormal.y * (roadHW + poleSetbackPx)  };
-
-  const pitLbl1 = isAerialType
-    ? dimAlong(dimNearPole, nearEdge, 400, `Pole Setback: ${fmtLen(geom.poleSetback,   geom.units)}`, false, 0, 20)
-    : dimAlong(dimNearPit,  nearEdge, 400, `Entry Setback: ${fmtLen(geom.entrySetback, geom.units)}`, false, 0, 20);
-  const pitLbl2 = isAerialType
-    ? dimAlong(farEdge, dimFarPole, 400, `Pole Setback: ${fmtLen(geom.poleSetback,  geom.units)}`, false, 0, 20)
-    : dimAlong(farEdge, dimFarPit,  400, `Exit Setback: ${fmtLen(geom.exitSetback,  geom.units)}`, false, 0, 20);
+  /* Setback labels — just the number, set in the middle of each setback zone
+     and rotated to run parallel to the road/sidewalk (perpAngle) instead of
+     following the bore's own (possibly skewed) angle. Offset sideways along
+     perpDir so they sit beside the cable line rather than on top of it. */
+  const nearSetbackPx = isAerialType ? poleSetbackPx : entrySetbackPx;
+  const farSetbackPx  = isAerialType ? poleSetbackPx : exitSetbackPx;
+  const nearSbVal     = isAerialType ? geom.poleSetback : geom.entrySetback;
+  const farSbVal      = isAerialType ? geom.poleSetback : geom.exitSetback;
+  const sbLblSide     = -90; /* sideways offset off the cable line, along perpDir — negative puts it on the left, opposite the ROW/Road width dims */
+  const nearSbMidX = poleL.x + cableDir.x * nearSetbackPx / 2 + perpDir.x * sbLblSide;
+  const nearSbMidY = poleL.y + cableDir.y * nearSetbackPx / 2 + perpDir.y * sbLblSide;
+  const farSbMidX  = poleR.x - cableDir.x * farSetbackPx  / 2 + perpDir.x * sbLblSide;
+  const farSbMidY  = poleR.y - cableDir.y * farSetbackPx  / 2 + perpDir.y * sbLblSide;
+  const pitLbl1 = `<text x="${nearSbMidX.toFixed(1)}" y="${nearSbMidY.toFixed(1)}" text-anchor="middle" dominant-baseline="middle" class="dim-label" font-size="20" font-weight="700" transform="rotate(${perpAngle.toFixed(1)} ${nearSbMidX.toFixed(1)} ${nearSbMidY.toFixed(1)})">${esc(fmtLen(nearSbVal, geom.units))}</text>`;
+  const pitLbl2 = `<text x="${farSbMidX.toFixed(1)}"  y="${farSbMidY.toFixed(1)}"  text-anchor="middle" dominant-baseline="middle" class="dim-label" font-size="20" font-weight="700" transform="rotate(${perpAngle.toFixed(1)} ${farSbMidX.toFixed(1)} ${farSbMidY.toFixed(1)})">${esc(fmtLen(farSbVal,  geom.units))}</text>`;
 
   /* cable / bore representation */
   const cableStroke = isAerialType
@@ -792,7 +821,7 @@ function drawPlanView(geom) {
 
   /* pit label positions — offset along cable direction so they sit
      outside the setback zone (N/S for E–W road, E/W for N–S road) */
-  const pitLblOff = 36;
+  const pitLblOff = 50;
   const entryLblX = (entryPitPlan.x - cableDir.x * pitLblOff).toFixed(1);
   const entryLblY = (entryPitPlan.y - cableDir.y * pitLblOff).toFixed(1);
   const exitLblX  = (exitPitPlan.x  + cableDir.x * pitLblOff).toFixed(1);
@@ -800,19 +829,17 @@ function drawPlanView(geom) {
 
   /* endpoint markers */
   const poleMark = `
-    <circle cx="${poleL.x.toFixed(1)}" cy="${poleL.y.toFixed(1)}" r="7" fill="#5D4037" stroke="#1B3A5C" stroke-width="1.2"/>
-    <circle cx="${poleL.x.toFixed(1)}" cy="${poleL.y.toFixed(1)}" r="2.5" fill="#fff"/>
-    <text x="${poleL.x.toFixed(1)}" y="${(poleL.y+20).toFixed(1)}" text-anchor="middle" class="pole-label">POLE A</text>
-    <circle cx="${poleR.x.toFixed(1)}" cy="${poleR.y.toFixed(1)}" r="7" fill="#5D4037" stroke="#1B3A5C" stroke-width="1.2"/>
-    <circle cx="${poleR.x.toFixed(1)}" cy="${poleR.y.toFixed(1)}" r="2.5" fill="#fff"/>
-    <text x="${poleR.x.toFixed(1)}" y="${(poleR.y-14).toFixed(1)}" text-anchor="middle" class="pole-label">POLE B</text>`;
+    <circle cx="${poleL.x.toFixed(1)}" cy="${poleL.y.toFixed(1)}" r="6" fill="#5D4037" stroke="#1B3A5C" stroke-width="1.2"/>
+    <circle cx="${poleL.x.toFixed(1)}" cy="${poleL.y.toFixed(1)}" r="2" fill="#fff"/>
+    <text x="${poleL.x.toFixed(1)}" y="${(poleL.y+16).toFixed(1)}" text-anchor="middle" class="pole-label">POLE A</text>
+    <circle cx="${poleR.x.toFixed(1)}" cy="${poleR.y.toFixed(1)}" r="6" fill="#5D4037" stroke="#1B3A5C" stroke-width="1.2"/>
+    <circle cx="${poleR.x.toFixed(1)}" cy="${poleR.y.toFixed(1)}" r="2" fill="#fff"/>
+    <text x="${poleR.x.toFixed(1)}" y="${(poleR.y-11).toFixed(1)}" text-anchor="middle" class="pole-label">POLE B</text>`;
   const endMarkers = isAerialType ? poleMark : `
-    <rect x="${(entryPitPlan.x-14).toFixed(1)}" y="${(entryPitPlan.y-8).toFixed(1)}" width="28" height="16" fill="#fff" stroke="#1B3A5C" stroke-width="1.5" rx="2"/>
+    <rect x="${(entryPitPlan.x-11).toFixed(1)}" y="${(entryPitPlan.y-6).toFixed(1)}" width="22" height="13" fill="#fff" stroke="#1B3A5C" stroke-width="1.5" rx="2"/>
     <text x="${entryLblX}" y="${entryLblY}" text-anchor="middle" dominant-baseline="middle" class="pit-label">ENTRY PIT</text>
-    <rect x="${(exitPitPlan.x-14).toFixed(1)}" y="${(exitPitPlan.y-8).toFixed(1)}" width="28" height="16" fill="#fff" stroke="#1B3A5C" stroke-width="1.5" rx="2"/>
+    <rect x="${(exitPitPlan.x-11).toFixed(1)}" y="${(exitPitPlan.y-6).toFixed(1)}" width="22" height="13" fill="#fff" stroke="#1B3A5C" stroke-width="1.5" rx="2"/>
     <text x="${exitLblX}" y="${exitLblY}" text-anchor="middle" dominant-baseline="middle" class="pit-label">EXIT PIT</text>`;
-
-  const crossAngDisplay = geom.crossAngDeg ?? 90;
 
   /* angle of road direction (perpDir) in degrees — for rotating road-aligned text */
   /* find where a ray from (ox,oy) in direction (dx,dy) first hits the viewport edge */
@@ -856,9 +883,8 @@ function drawPlanView(geom) {
     <!-- dimensions -->
     ${pitLbl1}
     ${pitLbl2}
-    ${dimAlong(rowNear, rowFar, 95, `${isCanal ? 'Easement' : 'ROW Width'}: ${fmtLen(geom.rowWidth, geom.units)}`, true)}
-    ${dimAlong(nearEdge, farEdge, 40, `${isCanal ? 'Canal Width' : 'Road Width'}: ${fmtLen(geom.roadWidth, geom.units)}`, true)}
-    <text x="${MAR.left}" y="${(VBH-18).toFixed(1)}" font-family="'IBM Plex Sans',sans-serif" font-size="20" fill="#1B3A5C">${isCanal ? `Canal / Ditch Crossing` : `Pavement: ${pavementLabel(geom.pavementType)}`} · Crossing Angle: ${crossAngDisplay}°${crossAngDisplay===90?' (perpendicular)':' (skewed)'} · NOT TO SCALE</text>
+    ${dimAlong(rowNear, rowFar, -145, `${isCanal ? 'Easement' : 'ROW Width'}: ${fmtLen(geom.rowWidth, geom.units)}`, true)}
+    ${dimAlong(nearEdge, farEdge, -60, `${isCanal ? 'Canal Width' : 'Road Width'}: ${fmtLen(geom.roadWidth, geom.units)}`, true)}
     <!-- north -->
     ${northArrow(compassCx, compassCy)}`;
 
@@ -870,10 +896,10 @@ function drawPlanView(geom) {
 /* ==========================================================
    BURIED BORE — PROFILE VIEW
    ========================================================== */
-const PVB_W = 860, PVB_H = 355;
+const PVB_W = 860, PVB_H = 320;
 const PM    = { left: 90, right: 40, top: 75 };
 const PDW   = PVB_W - PM.left - PM.right;
-const DEPTH_PX = 125;
+const DEPTH_PX = 105;
 const GY    = PM.top;
 const FY    = GY + DEPTH_PX;
 
@@ -908,7 +934,7 @@ function drawBuriedProfileView(geom) {
   const exitBis  = bisector({x:-1,y:0}, {x:-Math.cos(xRad),y:Math.sin(xRad)});
 
   const midX = (P1.x + P2.x) / 2;
-  const row1Y = FY + 56, row2Y = FY + 90, row3Y = FY + 120;
+  const row1Y = FY + 48, row2Y = FY + 76, row3Y = FY + 102;
   const depX = 44;
 
   const svg = `
@@ -953,6 +979,7 @@ function drawBuriedProfileView(geom) {
           fill="none" stroke="#CC00AA" stroke-width="4" stroke-linejoin="round" stroke-linecap="round" opacity=".85"/>
     <path d="M${P0.x.toFixed(1)} ${P0.y.toFixed(1)} L${P1.x.toFixed(1)} ${P1.y.toFixed(1)} L${P2.x.toFixed(1)} ${P2.y.toFixed(1)} L${P3.x.toFixed(1)} ${P3.y.toFixed(1)}"
           fill="none" stroke="#1B3A5C" stroke-width="1.3" stroke-dasharray="1 7" stroke-linejoin="round"/>
+    ${flowArrow(P1.x + (P2.x - P1.x) * 0.25, FY)}
 
     <!-- knee dots -->
     <circle cx="${P1.x.toFixed(1)}" cy="${P1.y.toFixed(1)}" r="3.5" fill="#1B3A5C"/>
@@ -984,12 +1011,7 @@ function drawBuriedProfileView(geom) {
     ${hDim(roadX2, P3.x,  row1Y, `Exit Setback: ${fmtLen(geom.exitSetback, units)}`)}
     ${hDim(P0.x, P3.x,   row2Y, `Overall Span: ${fmtLen(geom.totalSpan, units)}`)}
 
-    <!-- bore length callout -->
-    <text x="${PM.left}" y="${row3Y}" class="callout" style="fill:#000">TOTAL BORE LENGTH (computed): ${fmtLen(geom.boreLength, units)}</text>
-    ${geom.overlap ? `<text x="${PM.left}" y="${row3Y+18}" class="dim-label" fill="#B23A2E">⚠ transitions overlap — see warning</text>` : ''}
-
-    <!-- not to scale note -->
-    <text x="${PM.left}" y="${PVB_H - 8}" class="plan-note" style="font-size:11px">NOT TO SCALE — FOR ILLUSTRATION PURPOSES ONLY</text>`;
+    ${geom.overlap ? `<text x="${PM.left}" y="${row3Y}" class="dim-label" fill="#B23A2E">⚠ transitions overlap — see warning</text>` : ''}`;
 
   els.profileSvg.setAttribute('viewBox', `0 0 ${PVB_W} ${PVB_H}`);
   els.profileSvg.innerHTML = svg;
@@ -999,7 +1021,7 @@ function drawBuriedProfileView(geom) {
 /* ==========================================================
    AERIAL CROSSING — PROFILE VIEW
    ========================================================== */
-const APH = 420;   /* aerial profile height */
+const APH = 360;   /* aerial profile height */
 
 function drawAerialProfileView(geom) {
   const { units } = geom;
@@ -1088,6 +1110,7 @@ function drawAerialProfileView(geom) {
           fill="none" stroke="#CC00AA" stroke-width="2.5" stroke-linecap="round"/>
     <path d="M${poleLx.toFixed(1)} ${ptYA.toFixed(1)} Q${midX.toFixed(1)} ${cblCtrlY} ${poleRx.toFixed(1)} ${ptYB.toFixed(1)}"
           fill="none" stroke="#fff" stroke-width="0.8" stroke-dasharray="4 5" opacity=".6"/>
+    ${(() => { const p = quadBezierPt({x:poleLx,y:ptYA}, {x:midX,y:chordMidY+2*sagPx}, {x:poleRx,y:ptYB}, 0.25); return flowArrow(p.x, p.y); })()}
 
     <!-- cable spec leader -->
     <line x1="${midX.toFixed(1)}" y1="${midCblY.toFixed(1)}" x2="${midX.toFixed(1)}" y2="${(midCblY-40).toFixed(1)}" stroke="#1B3A5C" stroke-width="1"/>
@@ -1118,10 +1141,7 @@ function drawAerialProfileView(geom) {
 
     <!-- setback dims -->
     ${hDim(poleLx, roadX1, row2Y, `Pole Setback: ${fmtLen(geom.poleSetback, units)}`)}
-    ${hDim(roadX2, poleRx, row2Y, `Pole Setback: ${fmtLen(geom.poleSetback, units)}`)}
-
-    <!-- not to scale note -->
-    <text x="${AM.left}" y="${APH - 8}" class="plan-note" style="font-size:11px">NOT TO SCALE — FOR ILLUSTRATION PURPOSES ONLY</text>`;
+    ${hDim(roadX2, poleRx, row2Y, `Pole Setback: ${fmtLen(geom.poleSetback, units)}`)}`;
 
   els.profileSvg.setAttribute('viewBox', `0 0 ${PVB_W} ${APH}`);
   els.profileSvg.innerHTML = svg;
@@ -1131,7 +1151,7 @@ function drawAerialProfileView(geom) {
 /* ==========================================================
    CANAL / DITCH — PROFILE VIEW
    ========================================================== */
-const CPH = 420;   /* canal profile height */
+const CPH = 360;   /* canal profile height */
 
 function drawCanalProfileView(geom) {
   const { units } = geom;
@@ -1223,6 +1243,7 @@ function drawCanalProfileView(geom) {
           fill="none" stroke="#CC00AA" stroke-width="2.5" stroke-linecap="round"/>
     <path d="M${poleLx.toFixed(1)} ${ptY.toFixed(1)} Q${midX.toFixed(1)} ${cblCtrlY} ${poleRx.toFixed(1)} ${ptY.toFixed(1)}"
           fill="none" stroke="#fff" stroke-width="0.8" stroke-dasharray="4 5" opacity=".6"/>
+    ${(() => { const p = quadBezierPt({x:poleLx,y:ptY}, {x:midX,y:ptY+2*sagPx}, {x:poleRx,y:ptY}, 0.25); return flowArrow(p.x, p.y); })()}
 
     <!-- cable spec leader -->
     <line x1="${midX.toFixed(1)}" y1="${midCblY.toFixed(1)}" x2="${midX.toFixed(1)}" y2="${(midCblY-40).toFixed(1)}" stroke="#1B3A5C" stroke-width="1"/>
@@ -1253,9 +1274,7 @@ function drawCanalProfileView(geom) {
 
     <!-- pole setback dims -->
     ${hDim(poleLx, canalLx, row2Y, `Pole Setback: ${fmtLen(geom.poleSetback, units)}`)}
-    ${hDim(canalRx, poleRx, row2Y, `Pole Setback: ${fmtLen(geom.poleSetback, units)}`)}
-
-    <text x="${CM.left}" y="${CPH - 8}" class="plan-note" style="font-size:11px">NOT TO SCALE — FOR ILLUSTRATION PURPOSES ONLY</text>`;
+    ${hDim(canalRx, poleRx, row2Y, `Pole Setback: ${fmtLen(geom.poleSetback, units)}`)}`;
 
   els.profileSvg.setAttribute('viewBox', `0 0 ${PVB_W} ${CPH}`);
   els.profileSvg.innerHTML = svg;
@@ -1265,7 +1284,7 @@ function drawCanalProfileView(geom) {
 /* ==========================================================
    CANAL BURIED BORE — PROFILE VIEW
    ========================================================== */
-const CBPH = 420;
+const CBPH = 360;
 
 function drawCanalBuriedProfileView(geom) {
   const { units } = geom;
@@ -1345,6 +1364,7 @@ function drawCanalBuriedProfileView(geom) {
       fill="none" stroke="#CC00AA" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
     <polyline points="${P0.x.toFixed(1)},${P0.y.toFixed(1)} ${P1.x.toFixed(1)},${P1.y.toFixed(1)} ${P2.x.toFixed(1)},${P2.y.toFixed(1)} ${P3.x.toFixed(1)},${P3.y.toFixed(1)}"
       fill="none" stroke="#fff" stroke-width="1.2" stroke-dasharray="4 5" stroke-linecap="round" stroke-linejoin="round" opacity=".7"/>
+    ${flowArrow(P1.x + (P2.x - P1.x) * 0.25, FY)}
 
     <!-- entry pit marker -->
     <rect x="${(P0.x-14).toFixed(1)}" y="${(gY-10).toFixed(1)}" width="28" height="16" fill="#fff" stroke="#1B3A5C" stroke-width="1.5" rx="2"/>
@@ -1382,9 +1402,6 @@ function drawCanalBuriedProfileView(geom) {
     <!-- canal width dim -->
     ${hDim(canalLx, canalRx, gY - 18, `Canal Width: ${fmtLen(geom.canalWidth, units)}`)}
 
-    <!-- horizontal dims row 1: total bore length -->
-    <text x="${CBM.left}" y="${row1Y}" class="callout" style="fill:#000">TOTAL BORE LENGTH (computed): ${fmtLen(geom.boreLength, units)}</text>
-
     <!-- horizontal dims row 2: entry/exit slant + flat section -->
     ${hDim(P0.x, P1.x, row2Y, `Entry Slant: ${fmtLen(geom.entrySlant, units)}`)}
     ${hDim(P1.x, P2.x, row2Y, `Flat Section: ${fmtLen(geom.flatRun, units)}`)}
@@ -1392,9 +1409,7 @@ function drawCanalBuriedProfileView(geom) {
 
     <!-- setback dims -->
     ${hDim(P0.x, canalLx, row3Y, `Entry Setback: ${fmtLen(geom.entrySetback, units)}`)}
-    ${hDim(canalRx, P3.x, row3Y, `Exit Setback: ${fmtLen(geom.exitSetback, units)}`)}
-
-    <text x="${CBM.left}" y="${CBPH - 8}" class="plan-note" style="font-size:11px">NOT TO SCALE — FOR ILLUSTRATION PURPOSES ONLY</text>`;
+    ${hDim(canalRx, P3.x, row3Y, `Exit Setback: ${fmtLen(geom.exitSetback, units)}`)}`;
 
   els.profileSvg.setAttribute('viewBox', `0 0 ${PVB_W} ${CBPH}`);
   els.profileSvg.innerHTML = svg;
@@ -1571,6 +1586,238 @@ document.getElementById('btnPrint').addEventListener('click', () => window.print
 document.getElementById('chkPrintStats').addEventListener('change', function () {
   document.body.classList.toggle('no-print-stats', !this.checked);
 });
+
+/* ==========================================================
+   LOCATE ON MAP
+   Lets the user drop a site pin (Lat/Lon), derive Road Bearing,
+   and measure ROW Width from satellite imagery instead of
+   guessing it, so the plan view lines up with the real field
+   conditions. (Road Width itself is NOT measured here — it's a
+   narrower measurement where satellite zoom precision matters
+   more; ROW width is wide enough that click precision is less
+   of a concern.)
+   ========================================================== */
+(function () {
+  const modal        = document.getElementById('mapModal');
+  const mapHint       = document.getElementById('mapHint');
+  const mapReadout    = document.getElementById('mapReadout');
+  const modeCtrl      = document.getElementById('mapModeCtrl');
+  const btnLocate     = document.getElementById('btnLocate');
+  const btnMapClose   = document.getElementById('btnMapClose');
+  const btnMapCancel  = document.getElementById('btnMapCancel');
+  const btnMapApply   = document.getElementById('btnMapApply');
+  const btnMapClear   = document.getElementById('btnMapClear');
+  const btnMapGoto    = document.getElementById('btnMapGoto');
+  const btnMapMyLoc   = document.getElementById('btnMapMyLocation');
+  const mapGotoQuery  = document.getElementById('mapGotoQuery');
+
+  const HINTS = {
+    point:   'Click the crossing location on the map to drop the site pin.',
+    bearing: 'Click two points along the road centerline, in the direction of travel, to measure bearing.',
+    row:     'Click two points across the full ROW/easement (fence line to fence line) to measure ROW width.',
+  };
+
+  /* Accepts "34.0522, -118.2437" (comma or whitespace separated) */
+  function parseLatLon(str) {
+    const m = str.trim().match(/^(-?\d+(?:\.\d+)?)[,\s]+(-?\d+(?:\.\d+)?)$/);
+    if (!m) return null;
+    const lat = parseFloat(m[1]), lon = parseFloat(m[2]);
+    if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
+    return { lat, lon };
+  }
+
+  /* Free OSM Nominatim geocoder — no API key, fine for occasional interactive lookups */
+  async function geocodeAddress(query) {
+    const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(query)}`;
+    const res = await fetch(url, { headers: { 'Accept-Language': 'en' } });
+    if (!res.ok) throw new Error('Geocoding request failed.');
+    const results = await res.json();
+    if (!results.length) throw new Error('No results found for that address.');
+    return { lat: parseFloat(results[0].lat), lon: parseFloat(results[0].lon) };
+  }
+
+  async function resolveLocation(query) {
+    if (!query || !query.trim()) return null;
+    return parseLatLon(query) || await geocodeAddress(query);
+  }
+
+  async function goToQuery(query, inputEl) {
+    if (!query || !query.trim()) return;
+    mapHint.textContent = 'Searching…';
+    if (inputEl) inputEl.disabled = true;
+    try {
+      const loc = await resolveLocation(query);
+      map.setView([loc.lat, loc.lon], 19);
+      placeSiteMarker(loc.lat, loc.lon);
+      updateReadout();
+      mapHint.textContent = HINTS[mapMode];
+    } catch (err) {
+      mapHint.textContent = err.message || 'Could not find that location.';
+    } finally {
+      if (inputEl) inputEl.disabled = false;
+    }
+  }
+
+  let map           = null;
+  let mapMode       = 'point';
+  let siteMarker    = null;
+  let bearingPts    = [];   // [{marker, latlng}]
+  let bearingLine   = null;
+  let bearingDeg    = null; // computed, degrees 0-359
+  let rowPts        = [];   // [{marker, latlng}]
+  let rowLine       = null;
+  let rowWidthFt    = null; // computed, always stored in feet
+
+  function computeBearing(lat1, lon1, lat2, lon2) {
+    const p1 = lat1 * Math.PI / 180, p2 = lat2 * Math.PI / 180;
+    const dL = (lon2 - lon1) * Math.PI / 180;
+    const y = Math.sin(dL) * Math.cos(p2);
+    const x = Math.cos(p1) * Math.sin(p2) - Math.sin(p1) * Math.cos(p2) * Math.cos(dL);
+    return ((Math.atan2(y, x) * 180 / Math.PI) + 360) % 360;
+  }
+
+  function updateReadout() {
+    const parts = [];
+    if (siteMarker) {
+      const ll = siteMarker.getLatLng();
+      parts.push(`Site: ${ll.lat.toFixed(6)}, ${ll.lng.toFixed(6)}`);
+    }
+    if (bearingDeg !== null) parts.push(`Bearing: ${Math.round(bearingDeg)}°`);
+    if (rowWidthFt !== null) parts.push(`ROW Width: ${fmtLen(rowWidthFt, currentUnits)}`);
+    mapReadout.textContent = parts.join('   |   ');
+  }
+
+  function placeSiteMarker(lat, lon) {
+    if (siteMarker) { siteMarker.setLatLng([lat, lon]); return; }
+    siteMarker = L.marker([lat, lon], { draggable: true }).addTo(map)
+      .bindTooltip('Crossing site', { permanent: false });
+    siteMarker.on('dragend', updateReadout);
+  }
+
+  function clearBearingTool() {
+    bearingPts.forEach(p => map.removeLayer(p.marker));
+    bearingPts = [];
+    if (bearingLine) { map.removeLayer(bearingLine); bearingLine = null; }
+    bearingDeg = null;
+  }
+  function addBearingPoint(lat, lon) {
+    if (bearingPts.length === 2) clearBearingTool();
+    const marker = L.circleMarker([lat, lon], { radius: 5, color: '#D9622B', weight: 2, fillOpacity: 1 }).addTo(map);
+    bearingPts.push({ marker, latlng: [lat, lon] });
+    if (bearingPts.length === 2) {
+      bearingLine = L.polyline(bearingPts.map(p => p.latlng), { color: '#D9622B', weight: 3 }).addTo(map);
+      bearingDeg = computeBearing(bearingPts[0].latlng[0], bearingPts[0].latlng[1], bearingPts[1].latlng[0], bearingPts[1].latlng[1]);
+    }
+    updateReadout();
+  }
+  function clearRowTool() {
+    rowPts.forEach(p => map.removeLayer(p.marker));
+    rowPts = [];
+    if (rowLine) { map.removeLayer(rowLine); rowLine = null; }
+    rowWidthFt = null;
+  }
+  function addRowPoint(lat, lon) {
+    if (rowPts.length === 2) clearRowTool();
+    const marker = L.circleMarker([lat, lon], { radius: 5, color: '#1B3A5C', weight: 2, fillOpacity: 1 }).addTo(map);
+    rowPts.push({ marker, latlng: [lat, lon] });
+    if (rowPts.length === 2) {
+      rowLine = L.polyline(rowPts.map(p => p.latlng), { color: '#1B3A5C', weight: 3, dashArray: '6 4' }).addTo(map);
+      const meters = map.distance(rowPts[0].latlng, rowPts[1].latlng);
+      rowWidthFt = meters * FT_PER_M;
+    }
+    updateReadout();
+  }
+
+  function onMapClick(e) {
+    const { lat, lng } = e.latlng;
+    if (mapMode === 'point')        placeSiteMarker(lat, lng);
+    else if (mapMode === 'bearing') addBearingPoint(lat, lng);
+    else if (mapMode === 'row')     addRowPoint(lat, lng);
+  }
+
+  function initMapIfNeeded() {
+    if (map) return;
+    map = L.map('mapContainer').setView([39.8283, -98.5795], 4);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19, attribution: '&copy; OpenStreetMap contributors',
+    }).addTo(map);
+    map.on('click', onMapClick);
+  }
+
+  function openModal() {
+    modal.hidden = false;
+    initMapIfNeeded();
+    /* container just became visible at full modal size — resize the map
+       to it BEFORE centering, or the initial view can end up mis-scaled */
+    setTimeout(() => {
+      map.invalidateSize();
+      const q = els.siteSearch.value;
+      if (q && q.trim()) goToQuery(q, els.siteSearch);
+    }, 50);
+  }
+  function closeModal() { modal.hidden = true; }
+
+  btnLocate.addEventListener('click', openModal);
+  btnMapClose.addEventListener('click', closeModal);
+  btnMapCancel.addEventListener('click', closeModal);
+
+  modeCtrl.querySelectorAll('.seg[data-mapmode]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      mapMode = btn.dataset.mapmode;
+      modeCtrl.querySelectorAll('.seg').forEach(b => b.classList.toggle('active', b === btn));
+      mapHint.textContent = HINTS[mapMode];
+    });
+  });
+
+  btnMapClear.addEventListener('click', () => {
+    if (siteMarker) { map.removeLayer(siteMarker); siteMarker = null; }
+    clearBearingTool();
+    clearRowTool();
+    updateReadout();
+  });
+
+  btnMapGoto.addEventListener('click', () => goToQuery(mapGotoQuery.value, mapGotoQuery));
+  mapGotoQuery.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); goToQuery(mapGotoQuery.value, mapGotoQuery); }
+  });
+
+  btnMapMyLoc.addEventListener('click', () => {
+    if (!navigator.geolocation) { mapHint.textContent = 'Geolocation is not available in this browser.'; return; }
+    mapHint.textContent = 'Locating…';
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        const { latitude, longitude } = pos.coords;
+        map.setView([latitude, longitude], 19);
+        placeSiteMarker(latitude, longitude);
+        updateReadout();
+        mapHint.textContent = HINTS[mapMode];
+      },
+      () => { mapHint.textContent = 'Could not get your location — check browser permissions.'; }
+    );
+  });
+
+  btnMapApply.addEventListener('click', () => {
+    if (siteMarker) {
+      const ll = siteMarker.getLatLng();
+      els.siteSearch.value = `${ll.lat.toFixed(6)}, ${ll.lng.toFixed(6)}`;
+    }
+    if (bearingDeg !== null) {
+      els.roadDirection.value = 'custom';
+      els.bearingGroup.hidden = false;
+      els.roadBearing.value = Math.round(bearingDeg);
+    }
+    if (rowWidthFt !== null) {
+      els.rowWidth.value = (currentUnits === 'metric' ? rowWidthFt / FT_PER_M : rowWidthFt).toFixed(2);
+    }
+    closeModal();
+    hideWarning();
+    if (profileGenerated) generate();
+  });
+})();
+
+/* Footer copyright year — always shows the current year */
+const footerYearEl = document.getElementById('footerYear');
+if (footerYearEl) footerYearEl.textContent = new Date().getFullYear();
 
 /* ==========================================================
    INIT — empty state shown; drawing generated only on button click

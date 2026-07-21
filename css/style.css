@@ -40,11 +40,23 @@ html, body { margin: 0; height: 100%; background: var(--sheet-bg); color: var(--
 }
 .header-text p { margin: 2px 0 0; font-size: 11.5px; color: #AFC4D8; }
 
+/* ── Footer ──────────────────────────────────────────────── */
+#appFooter {
+  flex: 0 0 auto;
+  display: flex; align-items: center; justify-content: center;
+  height: 28px;
+  background: rgb(2, 46, 75);
+  color: rgba(247, 244, 244, 0.95);
+  font-family: var(--body); font-size: 11px;
+  border-top: 1px solid rgba(255,255,255,0.12);
+  font-size: 13px;
+}
+
 /* ── Two-column layout ───────────────────────────────────── */
 #layout {
   flex: 1 1 auto;
   display: grid;
-  grid-template-columns: 355px 1fr;
+  grid-template-columns: 320px 1fr;
   min-height: 0; /* allow children to scroll */
   overflow: hidden;
 
@@ -57,7 +69,7 @@ html, body { margin: 0; height: 100%; background: var(--sheet-bg); color: var(--
   background: rgb(2, 46, 75);
   border-right: 1.5px solid var(--paper-line);
   height: 100%;
-  width: 355px;
+  width: 320px;
   overflow: hidden;
   color:white;
 }
@@ -79,7 +91,7 @@ html, body { margin: 0; height: 100%; background: var(--sheet-bg); color: var(--
 #ticket .optional-tag { color: rgba(255,255,255,0.45); }
 #ticket .warning { color: #ffb3ae; background: rgba(178,58,46,.2); border-color: #ff8a80; }
 #ticket .type-btn { color: rgba(255,255,255,0.7); }
-#ticket .type-btn.active { color: var(--conduit); }
+#ticket .type-btn.active { background: rgb(6, 42, 201); color: #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3); border: 1px solid rgba(255,255,255,0.5); }
 #ticket .type-btn:not(.active):hover { color: #fff; background: rgba(255,255,255,0.12); }
 #ticket .type-selector { background: rgba(0,0,0,0.2); }
 #ticket .seg-control { border-color: rgba(255,255,255,0.3); }
@@ -153,6 +165,13 @@ select {
   transition: border-color .15s, box-shadow .15s;
 }
 select { font-family: var(--body); font-size: 12px; }
+/* Left panel only: narrower input/select boxes; labels above are separate
+   elements so they keep their full width and never wrap because of this. */
+#ticket input[type=text],
+#ticket input[type=number],
+#ticket select {
+  width: 88%;
+}
 input:focus, select:focus {
   outline: none; border-color: var(--conduit);
   box-shadow: 0 0 0 3px rgba(217,98,43,.12);
@@ -239,7 +258,7 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
   display: block;
 }
 .empty-title {
-  font-family: var(--display); font-size: 22px; font-weight: 700;
+  font-family: var(--display); font-size: 18px; font-weight: 700;
   color: var(--ink); margin: 0 0 10px; letter-spacing: .01em;
 }
 .empty-desc {
@@ -249,26 +268,20 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
 .empty-desc strong { color: var(--ink); }
 .empty-steps {
   list-style: none; margin: 0; padding: 0;
-  display: flex; flex-wrap: wrap; gap: 10px; justify-content: center;
+  display: flex; justify-content: center; align-items: center;
+  gap: 10px; flex-wrap: wrap;
 }
-.empty-steps li {
-  display: flex; align-items: center; gap: 8px;
-  font-size: 12.5px; color: var(--ink-soft);
-  background: rgba(27,58,92,.06);
-  padding: 7px 14px; border-radius: 20px;
-}
-.empty-steps span {
-  width: 20px; height: 20px; border-radius: 50%;
-  background: var(--ink); color: #fff;
-  font-size: 10px; font-weight: 700;
-  display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0;
-}
-.empty-steps strong { color: var(--conduit); }
+.empty-steps li { display: flex; }
+.empty-steps img { height: 34px; width: auto; display: block; }
+
+.canvas-image{ box-shadow: 0 4px 12px rgba(27,58,92,.82); border-radius: 6px; opacity: 0.7; }
+
+
+
 
 /* Drawing content ──────────────────────────────────────── */
 #drawingContent { padding: 24px; }
-#sheet { max-width: 1100px; margin: 0 auto; }
+#sheet { max-width: 900px; margin: 0 auto; }
 
 /* Toolbar */
 #sheetToolbar {
@@ -317,7 +330,7 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
 }
 .view-divider { height: 1.5px; background: var(--paper-line); margin: 10px 0 0; }
 
-#planSvg, #profileSvg { width: 100%; display: block; }
+#planSvg, #profileSvg { width: 62%; max-width: 620px; min-width: 320px; margin: 0 auto; display: block; }
 #planSvg.revealing, #profileSvg.revealing { animation: sheetReveal .35s ease-out; }
 @keyframes sheetReveal {
   from { opacity: 0; transform: translateY(5px); }
@@ -386,11 +399,87 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
 .tbl-val[contenteditable="true"]:hover  { background: rgba(27,58,92,.05); }
 .tbl-val[contenteditable="true"]:focus  { background: rgba(217,98,43,.07); }
 
+/* ── Locate-on-map button + modal ───────────────────────── */
+.btn-map {
+  width: 60%;
+  margin-top: 10px;
+  padding: 7px 10px;
+  font-size: 18px; 
+  font-family: var(--body); font-size: 12px; font-weight: 600;
+  border-radius: 5px; border: 1.5px solid rgba(255,255,255,0.35);
+  background: rgba(71, 70, 70, 0.8); color: #fff; cursor: pointer;
+  transition: background .12s;
+  align-self: center;
+}
+.btn-map:hover { background: rgba(255,255,255,0.18); }
+
+.map-modal {
+  position: fixed; inset: 0; z-index: 100;
+  background: rgba(2,20,35,.55);
+  display: flex; align-items: center; justify-content: center;
+  padding: 16px;
+}
+.map-modal-inner {
+  background: var(--paper);
+  border-radius: 8px;
+  width: min(1440px, 97vw);
+  height: 94vh;
+  display: flex; flex-direction: column;
+  box-shadow: 0 12px 40px rgba(0,0,0,.35);
+  overflow: hidden;
+}
+.map-modal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 16px;
+  background: var(--ink); color: #fff;
+  font-family: var(--display); font-size: 14px; font-weight: 700;
+  letter-spacing: .04em; text-transform: uppercase;
+}
+.map-modal-close {
+  background: none; border: none; color: #fff; font-size: 20px;
+  line-height: 1; cursor: pointer; padding: 2px 6px;
+}
+.map-modal-close:hover { color: var(--conduit); }
+
+.map-modal-toolbar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 10px 16px; border-bottom: 1px solid var(--paper-line);
+}
+.map-goto { display: flex; gap: 6px; align-items: center; }
+.map-goto input[type=text] { width: 240px; }
+.map-modal-toolbar .seg-control { flex: 0 0 auto; }
+.map-modal-toolbar .seg { padding: 6px 10px; font-size: 11px; white-space: nowrap; }
+
+.map-hint {
+  margin: 0; padding: 8px 16px;
+  font-size: 12.5px; color: var(--ink-soft);
+}
+
+#mapContainer { flex: 1 1 auto; min-height: 420px; }
+
+.map-modal-footer {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 10px 16px; border-top: 1px solid var(--paper-line); flex-wrap: wrap;
+}
+.map-readout {
+  font-family: var(--mono); font-size: 12.5px; color: var(--ink);
+}
+.map-modal-actions { display: flex; gap: 8px; }
+
+@media (max-width: 860px) {
+  .map-modal { padding: 0; }
+  .map-modal-inner { border-radius: 0; height: 100%; max-height: 100%; }
+  #mapContainer { min-height: 260px; }
+}
+
 /* ── Responsive ──────────────────────────────────────────── */
 @media (max-width: 860px) {
   #app { height: auto; overflow: auto; }
   #layout { grid-template-columns: 1fr; overflow: visible; height: auto; }
-  #ticket { height: auto; overflow: visible; border-right: none; border-bottom: 1.5px solid var(--paper-line); }
+  #ticket {
+    height: auto; overflow: visible; border-right: none; border-bottom: 1.5px solid var(--paper-line);
+    width: 100%; max-width: 500px; margin: 0 auto;
+  }
   #formScroll { overflow: visible; }
   #ticket, #sheetWrap { min-height: unset; }
   #emptyState { min-height: 400px; }
@@ -407,10 +496,17 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
   * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 
   /* hide all app chrome */
-  #appHeader, #ticket, #sheetToolbar, #emptyState { display: none !important; }
+  #appHeader, #ticket, #sheetToolbar, #emptyState, #appFooter { display: none !important; }
 
   /* hide stat boxes when user unchecked "Print stats" */
   body.no-print-stats #resultStrip { display: none !important; }
+
+  /* keep the stat boxes on one row regardless of how many there are —
+     shrink to fit the printable width instead of wrapping */
+  #resultStrip { flex-wrap: nowrap; gap: 6px; }
+  .stat { min-width: 0; flex: 1 1 0; padding: 5px 7px; }
+  .stat-label { font-size: 7px; white-space: nowrap; }
+  .stat-value { font-size: 11.5px; white-space: nowrap; }
 
   /* flat single-column layout */
   html, body { background: #fff; margin: 0; padding: 8mm 10mm; height: auto; overflow: visible; }

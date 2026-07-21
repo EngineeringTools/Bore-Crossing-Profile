@@ -3,10 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Bore Crossing Profile Generator — Fiber Road Crossing</title>
+<title>Crossing Profile Generator — Fiber Road Crossing</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -16,7 +17,7 @@
   <!-- ── Header ─────────────────────────────────────────── -->
   <header id="appHeader">
     <div class="header-text">
-      <h1 style="color: white; font-size: 20px;">Bore Crossing Profile Generator</h1>
+      <h1 style="color: white; font-size: 20px;"> Crossing Profile Generator</h1>
       <p style="font-size: 15px; color:white;">Plan &amp; Profile Views for Fiber Road Crossings</p>
     </div>
   </header>
@@ -30,27 +31,17 @@
       <div id="ticketTop">
         <div class="type-selector" role="group" aria-label="Crossing type">
           <button type="button" class="type-btn active" data-type="buried" id="typeBuried">
-            <svg viewBox="0 0 20 20" aria-hidden="true">
-              <rect x="6" y="3" width="8" height="3.5" rx="1" fill="currentColor" opacity=".3"/>
-              <path d="M3 9.5 Q6 9.5 8 13.5 L12 13.5 Q14 9.5 17 9.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
+          <img src="data/buried.png" alt="" width="63" height="16" aria-hidden="true">
             Buried Bore
           </button>
           <button type="button" class="type-btn" data-type="aerial" id="typeAerial">
-            <svg viewBox="0 0 20 20" aria-hidden="true">
-              <line x1="3" y1="5" x2="3" y2="16" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
-              <line x1="17" y1="5" x2="17" y2="16" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
-              <path d="M3 6 Q10 3.5 17 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-              <line x1="3" y1="16" x2="17" y2="16" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-dasharray="2 2"/>
-            </svg>
+            <img src="data/aerial.png" alt="" width="35" height="15" aria-hidden="true">
+
             Aerial Poles
           </button>
           <button type="button" class="type-btn" data-type="canal" id="typeCanal">
-            <svg viewBox="0 0 20 20" aria-hidden="true">
-              <path d="M1 7 L5 13 L15 13 L19 7" fill="currentColor" fill-opacity=".18" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
-              <path d="M4 10 Q7 8.8 10 10 Q13 11.2 16 10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-              <path d="M4 12.5 Q7 11.3 10 12.5 Q13 13.7 16 12.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-            </svg>
+            <img src="data/canal-icon.png" alt="" width="38" height="15 aria-hidden="true">
+
             Canal / Ditch
           </button>
         </div>
@@ -62,6 +53,13 @@
           <div class="field-group">
             <label for="projectName" class="headings">Project / Crossing</label>
             <input type="text" id="projectName" placeholder="e.g. Main Street Fiber Crossing">
+          </div><br>
+
+          <div class="field-group">
+            <label for="siteSearch" class="headings">Site Location <span class="optional-tag">opt.</span></label>
+            <input type="text" id="siteSearch" placeholder="Address, or lat, lon (e.g. 34.0522, -118.2437)">
+            <button type="button" id="btnLocate" class="btn btn-map"> Locate on Map</button>
+            <p class="field-hint">Record GPS coordinates &amp; auto-fill Road Direction / ROW Width from satellite imagery</p>
           </div><br>
 
           <div class="field-group">
@@ -141,7 +139,7 @@
               <div class="field-group">
                 <label for="entryAngle" class="headings">Entry Angle <span class="unit-tag">°</span></label>
                 <input type="number" id="entryAngle" value="12" min="1" max="45" step="0.5">
-                <p class="field-hint" style="font-size:12px; color:rgb(228, 218, 218), text-align:center;">Typical: 10°–14°</p>
+                <p class="field-hint" style="font-size:12px; color:rgb(228, 218, 218); text-align:center;">Typical: 10°–14°</p>
               </div>
               <div class="field-group">
                 <label for="exitAngle" class="headings" >Exit Angle <span class="unit-tag">°</span></label>
@@ -313,74 +311,14 @@
       <div id="emptyState">
         <div class="empty-illustration" aria-hidden="true">
           <!-- Mini engineering sketch of a bore crossing -->
-          <svg viewBox="0 0 320 170" xmlns="http://www.w3.org/2000/svg">
-            <defs>
-              <pattern id="ep-soil" width="8" height="8" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
-                <rect width="8" height="8" fill="#F0EAD8"/>
-                <line x1="0" y1="0" x2="0" y2="8" stroke="#D4C4A4" stroke-width="1.2"/>
-              </pattern>
-            </defs>
-            <!-- Ground -->
-            <rect x="20" y="75" width="280" height="80" fill="url(#ep-soil)" rx="2"/>
-            <!-- Grass/ground left -->
-            <rect x="20" y="68" width="80" height="7" fill="#C8E6C4" rx="1"/>
-            <!-- Grass/ground right -->
-            <rect x="220" y="68" width="80" height="7" fill="#C8E6C4" rx="1"/>
-            <!-- Ground line -->
-            <line x1="20" y1="75" x2="300" y2="75" stroke="#5D8A4E" stroke-width="1.5"/>
-            <!-- Road pavement -->
-            <rect x="100" y="60" width="120" height="15" fill="#4A5260" rx="1"/>
-            <!-- Center stripe -->
-            <line x1="100" y1="67.5" x2="220" y2="67.5" stroke="#fff" stroke-width="1.2" stroke-dasharray="10 8" opacity=".7"/>
-            <!-- Road width dim -->
-            <line x1="100" y1="50" x2="220" y2="50" stroke="#1B3A5C" stroke-width="1" marker-start="url(#ep-arr)" marker-end="url(#ep-arr)"/>
-            <line x1="100" y1="46" x2="100" y2="57" stroke="#1B3A5C" stroke-width="1"/>
-            <line x1="220" y1="46" x2="220" y2="57" stroke="#1B3A5C" stroke-width="1"/>
-            <text x="160" y="47" text-anchor="middle" font-family="monospace" font-size="9" fill="#1B3A5C">ROAD WIDTH</text>
-            <!-- Bore path -->
-            <path d="M 40 75 L 100 118 L 220 118 L 280 75"
-                  fill="none" stroke="#D9622B" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M 40 75 L 100 118 L 220 118 L 280 75"
-                  fill="none" stroke="#fff" stroke-width="1.5" stroke-dasharray="4 5" stroke-linecap="round" opacity=".7"/>
-            <!-- Entry pit marker -->
-            <rect x="32" y="70" width="16" height="10" rx="1" fill="#fff" stroke="#1B3A5C" stroke-width="1.2"/>
-            <text x="40" y="60" text-anchor="middle" font-family="sans-serif" font-size="7.5" font-weight="700" fill="#1B3A5C">ENTRY PIT</text>
-            <!-- Exit pit marker -->
-            <rect x="272" y="70" width="16" height="10" rx="1" fill="#fff" stroke="#1B3A5C" stroke-width="1.2"/>
-            <text x="280" y="60" text-anchor="middle" font-family="sans-serif" font-size="7.5" font-weight="700" fill="#1B3A5C">EXIT PIT</text>
-            <!-- Depth dim -->
-            <line x1="22" y1="75" x2="22" y2="118" stroke="#1B3A5C" stroke-width="1"/>
-            <line x1="19" y1="75" x2="25" y2="75" stroke="#1B3A5C" stroke-width="1"/>
-            <line x1="19" y1="118" x2="25" y2="118" stroke="#1B3A5C" stroke-width="1"/>
-            <text x="12" y="100" text-anchor="middle" font-family="monospace" font-size="8" fill="#1B3A5C" transform="rotate(-90 12 100)">DEPTH</text>
-            <!-- Entry angle arc -->
-            <path d="M 60 75 A 22 22 0 0 1 50.5 95.5" fill="none" stroke="#1B3A5C" stroke-width="1"/>
-            <text x="68" y="92" font-family="monospace" font-size="8" fill="#1B3A5C">12°</text>
-            <!-- Plan view inset (top-right) -->
-            <rect x="230" y="8" width="70" height="42" rx="2" fill="#EEF1E6" stroke="#1B3A5C" stroke-width="0.8"/>
-            <text x="265" y="18" text-anchor="middle" font-family="sans-serif" font-size="6" font-weight="700" fill="#5B7898" letter-spacing="1">PLAN VIEW</text>
-            <rect x="238" y="21" width="54" height="16" fill="#4A5260" opacity=".5" rx="1"/>
-            <line x1="265" y1="21" x2="265" y2="37" stroke="#fff" stroke-width="0.8" stroke-dasharray="4 3" opacity=".7"/>
-            <line x1="248" y1="29" x2="282" y2="29" stroke="#D9622B" stroke-width="2.5" stroke-linecap="round"/>
-            <!-- North arrow -->
-            <g transform="translate(289 16)">
-              <line x1="0" y1="8" x2="0" y2="-8" stroke="#1B3A5C" stroke-width="1"/>
-              <path d="M-4 -4 L0 -12 L4 -4 Z" fill="#1B3A5C"/>
-            </g>
-            <text x="289" y="36" text-anchor="middle" font-family="sans-serif" font-size="7" font-weight="700" fill="#1B3A5C">N</text>
-            <defs>
-              <marker id="ep-arr" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
-                <path d="M0,0 L8,4 L0,8 Z" fill="#1B3A5C"/>
-              </marker>
-            </defs>
-          </svg>
+           <img src="data/canvas-image.png" alt="" width="350" height="150" class="canvas-image">
         </div>
-        <p class="empty-title">No Profile Generated Yet</p>
-        <p class="empty-desc" style="color: black;">Enter your crossing parameters in the panel on the left, then click <strong>Generate Profile</strong> to produce the plan and crossing profile drawings.</p>
+        <p class="empty-title">No Profile Generated Yet - This is only instruction</p>
+        <p class="empty-desc" style="color: black;">Follow the three steps below on the left side panel to generate the plan and crossing profile drawings for your project.</p>
         <ol class="empty-steps">
-          <li><span>1</span> Choose crossing type</li>
-          <li><span>2</span> Enter road &amp; bore data</li>
-          <li><span>3</span> Click <strong>Generate Profile</strong></li>
+          <li><img src="data/step1.png" alt="" class="stepimage" style="height: 45px;"></li>
+          <li><img src="data/step2.png" alt="" class="stepimage" style="height: 45px;"></li>
+          <li><img src="data/step3.png" alt="" class="stepimage" style="height: 45px;"></li>
         </ol>
       </div>
 
@@ -442,12 +380,18 @@
                     <div class="tbl-val" id="tbType">Buried Bore</div>
                   </td>
                   <td colspan="3" class="tbl-cell">
-                    <div class="tbl-key">Notes</div>
-                    <div class="tbl-val" contenteditable="true" id="tbDrawnBy"></div>
+                    <div class="tbl-key">Crossing Notes</div>
+                    <div class="tbl-val" id="tbAutoNotes">—</div>
                   </td>
                   <td class="tbl-cell">
                     <div class="tbl-key">Scale</div>
                     <div class="tbl-val">NOT TO SCALE</div>
+                  </td>
+                </tr>
+                <tr>
+                  <td colspan="5" class="tbl-cell">
+                    <div class="tbl-key">Additional Notes</div>
+                    <div class="tbl-val" contenteditable="true" id="tbDrawnBy"></div>
                   </td>
                 </tr>
               </tbody>
@@ -460,8 +404,45 @@
     </section><!-- /sheetWrap -->
 
   </main>
-</div>
 
+  <footer id="appFooter">&copy; Abdullah Ameen, <span id="footerYear">2026</span></footer>
+
+  <!-- ── Locate-on-map modal ────────────────────────────── -->
+  <div id="mapModal" class="map-modal" hidden>
+    <div class="map-modal-inner">
+      <div class="map-modal-header">
+        <span>Locate Crossing on Map</span>
+        <button type="button" id="btnMapClose" class="map-modal-close" aria-label="Close">&times;</button>
+      </div>
+
+      <div class="map-modal-toolbar">
+        <div class="map-goto">
+          <input type="text" id="mapGotoQuery" placeholder="Address, or lat, lon">
+          <button type="button" id="btnMapGoto" class="btn">Go</button>
+          <button type="button" id="btnMapMyLocation" class="btn" title="Use my current GPS location">📍 My Location</button>
+        </div>
+        <div class="seg-control" id="mapModeCtrl" role="radiogroup" aria-label="Map tool">
+          <button type="button" class="seg active" data-mapmode="point">Site Point</button>
+          <button type="button" class="seg" data-mapmode="bearing">Road Bearing</button>
+          <button type="button" class="seg" data-mapmode="row">ROW Width</button>
+        </div>
+        <button type="button" id="btnMapClear" class="btn">Clear</button>
+      </div>
+
+      <p id="mapHint" class="map-hint">Click the crossing location on the map to drop the site pin.</p>
+      <div id="mapContainer"></div>
+
+      <div class="map-modal-footer">
+        <div id="mapReadout" class="map-readout"></div>
+        <div class="map-modal-actions">
+          <button type="button" id="btnMapCancel" class="btn">Cancel</button>
+          <button type="button" id="btnMapApply" class="btn btn-primary">Apply to Form</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="js/leaflet.js"></script>
 <script src="js/script.js"></script>
 </body>
 </html>
